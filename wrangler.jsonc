@@ -17,7 +17,7 @@
     {
       "binding": "DB",
       "database_name": "greenclone-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "4ddb0b7c-48eb-4dca-9c9a-266794fdf3b1",
       "migrations_dir": "migrations"
     }
   ],
