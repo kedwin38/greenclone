@@ -16,3 +16,8 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// Makes getCloudflareContext() (D1 / R2 bindings) work during `next dev`.
+// Safe to call unconditionally — it is a no-op outside `next dev`.
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+initOpenNextCloudflareForDev();

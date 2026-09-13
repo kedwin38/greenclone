@@ -1,6 +1,3 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import {
   S3Client,
   PutObjectCommand,
@@ -43,10 +40,14 @@ async function enforceRetention(s3: S3Client, cfg: BackupSettings) {
 }
 
 /**
- * Snapshots the live SQLite database (via VACUUM INTO, which produces a
- * consistent copy even while the app keeps writing to it) and uploads it to
- * the admin-configured S3-compatible bucket. Safe to call concurrently with
- * normal app traffic; not safe to call twice at once (guarded by the caller).
+ * Exports every table as a single JSON snapshot and uploads it to the
+ * admin-configured S3-compatible bucket (AWS S3, Cloudflare R2, B2, …).
+ *
+ * On the Workers runtime there is no filesystem and no SQLite file to
+ * `VACUUM INTO`, so the snapshot is built in memory from the database via
+ * Prisma. Restore by reading the JSON back into the tables. Image binaries
+ * live in R2 and are not included here — back the R2 bucket up separately if
+ * required (R2 supports its own object lifecycle and replication).
  */
 export async function runBackup(): Promise<{ key: string; size: number }> {
   const cfg = await getSettingGroup("backup");
@@ -57,20 +58,62 @@ export async function runBackup(): Promise<{ key: string; size: number }> {
   }
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const tmpPath = path.join(os.tmpdir(), `gcn-backup-${stamp}.sqlite`);
+  const key = `${keyPrefix(cfg)}gcn-backup-${stamp}.json`;
 
   try {
-    await db.$executeRaw`VACUUM INTO ${tmpPath}`;
-    const data = await fs.readFile(tmpPath);
-    const key = `${keyPrefix(cfg)}gcn-backup-${stamp}.sqlite`;
+    const [
+      users,
+      categories,
+      products,
+      imageAssets,
+      orders,
+      orderItems,
+      payments,
+      supportTickets,
+      ticketReplies,
+      settings,
+      auditLogs,
+    ] = await Promise.all([
+      db.user.findMany(),
+      db.category.findMany(),
+      db.product.findMany(),
+      db.imageAsset.findMany(),
+      db.order.findMany(),
+      db.orderItem.findMany(),
+      db.payment.findMany(),
+      db.supportTicket.findMany(),
+      db.ticketReply.findMany(),
+      db.setting.findMany(),
+      db.auditLog.findMany(),
+    ]);
+
+    const snapshot = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      tables: {
+        users,
+        categories,
+        products,
+        imageAssets,
+        orders,
+        orderItems,
+        payments,
+        supportTickets,
+        ticketReplies,
+        settings,
+        auditLogs,
+      },
+    };
+
+    const body = new TextEncoder().encode(JSON.stringify(snapshot));
 
     const s3 = client(cfg);
     await s3.send(
       new PutObjectCommand({
         Bucket: cfg.bucket,
         Key: key,
-        Body: data,
-        ContentType: "application/x-sqlite3",
+        Body: body,
+        ContentType: "application/json",
       })
     );
     await enforceRetention(s3, cfg);
@@ -78,11 +121,11 @@ export async function runBackup(): Promise<{ key: string; size: number }> {
     await saveSettingGroup("backup", {
       lastRunAt: new Date().toISOString(),
       lastRunOk: true,
-      lastRunMessage: `Backed up ${(data.length / 1024).toFixed(0)} KB to ${key}`,
+      lastRunMessage: `Backed up ${(body.length / 1024).toFixed(0)} KB to ${key}`,
     });
-    await audit(null, "backup.success", "backup", key, { size: data.length });
+    await audit(null, "backup.success", "backup", key, { size: body.length });
 
-    return { key, size: data.length };
+    return { key, size: body.length };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown backup error.";
     await saveSettingGroup("backup", {
@@ -92,8 +135,6 @@ export async function runBackup(): Promise<{ key: string; size: number }> {
     });
     await audit(null, "backup.failed", "backup", undefined, { message });
     throw err instanceof BackupError ? err : new BackupError(message);
-  } finally {
-    await fs.unlink(tmpPath).catch(() => {});
   }
 }
 

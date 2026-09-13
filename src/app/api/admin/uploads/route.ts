@@ -1,8 +1,16 @@
 import { NextRequest } from "next/server";
+import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
+import { bucket } from "@/lib/r2";
 import { ok, fail, assertCsrf } from "@/lib/api";
 import { apiUser } from "@/lib/session";
 import { audit } from "@/lib/audit";
+
+const EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB
 const MAX_IMAGES = 120; // total stored image budget
@@ -66,8 +74,10 @@ export async function POST(req: NextRequest) {
         415
       );
     }
+    const key = `img/${nanoid()}.${EXT[mime]}`;
+    await bucket().put(key, bytes, { httpMetadata: { contentType: mime } });
     const image = await db.imageAsset.create({
-      data: { mime, size: bytes.byteLength, data: bytes },
+      data: { mime, size: bytes.byteLength, key },
     });
     ids.push(image.id);
   }
