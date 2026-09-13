@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { bucket } from "@/lib/r2";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,13 @@ export async function GET(
   if (!image) {
     return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
   }
-  const body = new Uint8Array(image.data);
+
+  const object = await bucket().get(image.key);
+  if (!object) {
+    return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+  }
+
+  const body = new Uint8Array(await object.arrayBuffer());
   return new NextResponse(body, {
     headers: {
       "Content-Type": image.mime,

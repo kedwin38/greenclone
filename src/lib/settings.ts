@@ -137,7 +137,9 @@ export async function getSettingGroup<K extends keyof AllSettings>(
   const defaults = DEFAULT_SETTINGS[group];
   if (!row) return { ...defaults };
   try {
-    const parsed = JSON.parse(decrypt(row.value)) as Partial<AllSettings[K]>;
+    const plain = await decrypt(row.value);
+    if (!plain) return { ...defaults };
+    const parsed = JSON.parse(plain) as Partial<AllSettings[K]>;
     return { ...defaults, ...parsed };
   } catch {
     return { ...defaults };
@@ -160,10 +162,11 @@ export async function saveSettingGroup<K extends keyof AllSettings>(
 ): Promise<AllSettings[K]> {
   const current = await getSettingGroup(group);
   const next = { ...current, ...patch };
+  const value = await encrypt(JSON.stringify(next));
   await db.setting.upsert({
     where: { key: group },
-    update: { value: encrypt(JSON.stringify(next)) },
-    create: { key: group, value: encrypt(JSON.stringify(next)) },
+    update: { value },
+    create: { key: group, value },
   });
   return next;
 }

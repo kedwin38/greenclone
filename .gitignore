@@ -15,3 +15,8 @@ tests/*.sqlite*
 Thumbs.db
 .vscode/
 tsconfig.tsbuildinfo
+
+# Cloudflare / OpenNext
+.open-next/
+.wrangler/
+.dev.vars

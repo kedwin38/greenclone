@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "greenclone",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-09-01",
+  // nodejs_compat is required by @opennextjs/cloudflare and by the Node APIs
+  // used at runtime (bcryptjs, the AWS S3 SDK). node:crypto's scryptSync is
+  // NOT polyfilled, which is why lib/crypto.ts uses WebCrypto instead.
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // SQLite database (Prisma via the D1 driver adapter). Replace database_id
+  // with the id printed by `wrangler d1 create greenclone-db`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "greenclone-db",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Product image storage. Create with `wrangler r2 bucket create greenclone-uploads`.
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "greenclone-uploads"
+    }
+  ],
+  // Non-secret vars. Secrets (SESSION_SECRET, ADMIN_PASSWORD, CRON_SECRET,
+  // SETUP_TOKEN) must be set with `wrangler secret put <NAME>` — never here.
+  "vars": {
+    "APP_URL": "https://greenclone.example.workers.dev",
+    "MPESA_SIMULATE": "false",
+    "ADMIN_NAME": "Green Admin",
+    "ADMIN_PHONE": "254700000000"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

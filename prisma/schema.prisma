@@ -1,9 +1,15 @@
 // Green Color Networks — database schema
 generator client {
+  // Driver adapters (stable since Prisma 6.7) let Prisma run on the Cloudflare
+  // Workers runtime through the D1 adapter — there is no native query-engine
+  // binary on Workers.
   provider = "prisma-client-js"
 }
 
 datasource db {
+  // D1 is SQLite-compatible, so the datasource provider stays "sqlite".
+  // DATABASE_URL is only used by the Prisma CLI for local tooling; at runtime
+  // the connection comes from the D1 binding via the driver adapter.
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
@@ -81,11 +87,14 @@ model Product {
   orderItems OrderItem[]
 }
 
+// Image binaries live in Cloudflare R2, not in the database. This table is a
+// lightweight registry mapping the numeric id used throughout the app
+// (products reference images as [{ id, alt }]) to the R2 object key.
 model ImageAsset {
   id        Int      @id @default(autoincrement())
   mime      String
   size      Int
-  data      Bytes
+  key       String // R2 object key, e.g. "img/aBc123.jpg"
   createdAt DateTime @default(now())
 }
 

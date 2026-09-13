@@ -6,7 +6,12 @@ import { isBackupDue, runBackup } from "./lib/backup";
 
 const g = globalThis as unknown as { __gcnBackupTimer?: NodeJS.Timeout };
 
-if (!g.__gcnBackupTimer) {
+// The in-process setInterval scheduler only makes sense on a long-running
+// server (Docker / Railway / Fly). On Cloudflare Workers isolates are
+// short-lived and a timer spanning requests won't survive, so it is disabled
+// by default there — use a Cloudflare Cron Trigger hitting /api/cron/backup
+// instead. Set ENABLE_INPROC_BACKUP_SCHEDULER=true on a container host.
+if (process.env.ENABLE_INPROC_BACKUP_SCHEDULER === "true" && !g.__gcnBackupTimer) {
   const CHECK_INTERVAL_MS = 15 * 60 * 1000;
   let running = false;
 
